@@ -5,6 +5,12 @@ import { useLocalStorage } from './hooks/useLocalStorage';
 
 const STORAGE_KEY = 'kavia.todo.items';
 
+const FILTERS = /** @type {const} */ ({
+  all: 'All',
+  active: 'Active',
+  completed: 'Completed',
+});
+
 /**
  * Generate a reasonably unique id without external deps.
  * (crypto.randomUUID is not supported in all older environments).
@@ -20,12 +26,21 @@ function createId() {
 function App() {
   const [todos, setTodos] = useLocalStorage(STORAGE_KEY, []);
   const [newText, setNewText] = useState('');
+  const [filter, setFilter] = useState('all');
 
   const stats = useMemo(() => {
     const total = todos.length;
     const completed = todos.filter((t) => t.completed).length;
     return { total, completed, remaining: total - completed };
   }, [todos]);
+
+  // Derive visible items from the full persisted list.
+  // This ensures switching filters never mutates or deletes stored tasks.
+  const visibleTodos = useMemo(() => {
+    if (filter === 'active') return todos.filter((t) => !t.completed);
+    if (filter === 'completed') return todos.filter((t) => t.completed);
+    return todos;
+  }, [todos, filter]);
 
   const addTodo = () => {
     const trimmed = newText.trim();
@@ -119,6 +134,20 @@ function App() {
             </form>
 
             <div className="toolbar" role="region" aria-label="List actions">
+              <div className="filterGroup" role="group" aria-label="Filter tasks">
+                {Object.entries(FILTERS).map(([key, label]) => (
+                  <button
+                    key={key}
+                    type="button"
+                    className={`btn btnFilter ${filter === key ? 'btnFilterActive' : ''}`}
+                    onClick={() => setFilter(key)}
+                    aria-pressed={filter === key}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+
               <button
                 type="button"
                 className="btn btnGhost"
@@ -140,9 +169,20 @@ function App() {
                 <p className="emptyTitle">No tasks yet</p>
                 <p className="emptyHint">Add your first task above to get started.</p>
               </div>
+            ) : visibleTodos.length === 0 ? (
+              <div className="empty" role="status" aria-live="polite">
+                <p className="emptyTitle">Nothing here</p>
+                <p className="emptyHint">
+                  {filter === 'active'
+                    ? 'All tasks are completed. Switch to Completed to view them.'
+                    : filter === 'completed'
+                      ? 'No completed tasks yet. Switch to Active to see what’s next.'
+                      : 'Add your first task above to get started.'}
+                </p>
+              </div>
             ) : (
               <ul className="todoList" aria-label="Todo list">
-                {todos.map((todo) => (
+                {visibleTodos.map((todo) => (
                   <TodoItem
                     key={todo.id}
                     todo={todo}
